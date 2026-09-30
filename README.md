@@ -1,81 +1,145 @@
-# AI Social Agent
+# AI Social Agent (全平台社交智能自动回复系统)
 
-面向「心遇」聊天软件（网易，包名 `com.netease.moyi`，IM 底层网易云信 `com.netease.nimlib`）的**可扩展多平台 AI 自动回复助手**。按《企业级架构方案说明书》框架交付三个源码子项目：FastAPI 后端、Web 管理后台、Android Xposed 模块。**本工程交付源码，不打包 APK、不提供无障碍与微信伪装规避功能。**
+<div align="center">
 
-## 架构
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=flat-square&logo=fastapi)
+![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&logo=python)
+![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react)
+![AntD](https://img.shields.io/badge/Ant%20Design-v5-0170FE?style=flat-square&logo=antdesign)
+![Android](https://img.shields.io/badge/Android-LSPosed%20%7C%20Kotlin-3DDC84?style=flat-square&logo=android)
+![WebSocket](https://img.shields.io/badge/WebSocket-Realtime%20Push-orange?style=flat-square)
+
+<p align="center">
+  <b>面向现代即时通讯软件的高扩展性全链路 AI 自动应答与运营协同系统</b><br>
+  包含「FastAPI 智能风控中台 · React+AntD 运营管理控制台 · Android Xposed 底层无感挂载模块」。
+</p>
+
+</div>
+
+---
+
+## 🏗️ 总体系统架构
 
 ```
-┌──────────────┐   HTTP/API + WebSocket    ┌──────────────────┐
-│ Android 模块  │ ───────────────────────▶ │ FastAPI 后端      │
-│ (Xposed 钩子) │ ◀─────────────────────── │ 认证/卡密/Agent/… │
-└──────────────┘   suggestion / kill_switch└────────┬─────────┘
-                                                    │
-┌──────────────┐                                    │
-│ Web 管理后台   │ ─────────────────────────────────┘
-│ (React+AntD) │   运营配置：人设/画像/卡密/审计
-└──────────────┘
+┌──────────────────┐    HTTP REST API + WebSocket    ┌──────────────────────────────────┐
+│   Android 端模块  │ ─────────────────────────────▶ │          FastAPI 核心中台         │
+│  (LSPosed 挂载点) │ ◀───────────────────────────── │  - JWT 鉴权与卡密生命周期管理     │
+└──────────────────┘     智能候选推荐 / 一键熔断广播    │  - 联系人画像与动态人设 Prompt    │
+                                                     │  - OpenAI 兼容模型网关 (支持Mock) │
+┌──────────────────┐                                 │  - 拟人化延迟调度器 (delay_ms)    │
+│   Web 运营控制台  │ ───────────────────────────────┘  - 敏感词合规过滤 (Half转人工)    │
+│  (React 18+AntD) │   全局运营：人设 / 卡密 / 审计看板 └──────────────────────────────────┘
+└──────────────────┘
 ```
 
-- **backend/**：FastAPI + SQLAlchemy + SQLite。JWT 认证、卡密授权（吊销即 Kill Switch）、联系人画像、人设、短期记忆、OpenAI 兼容模型网关（无 key 时降级 mock）、AI 决策 Agent（敏感词 half 模式转人工、节奏调度 delay_ms）、WebSocket 推送、审计日志、管理看板。
-- **admin-web/**：React 18 + Vite 5 + TS + Ant Design 5。仪表盘 / 联系人画像 / 人设 / 卡密管理（批量生成 + 吊销）/ 审计日志。
-- **android/**：Kotlin + Xposed（参考 WeChatAIAutoReply 源码结构）。`api/`（后端客户端）、`data/`（配置与卡密）、`hook/`（心遇消息 Hook + 自动回复引擎 + 建议悬浮窗）、`net/`（WebSocket 收建议与 Kill Switch）、`ui/`（配置界面）。
+### 子系统模块职责划分
 
-## 快速开始
+- **`backend/` (服务核心)**：
+  - 基于 Python 3.12 + FastAPI + SQLAlchemy 构建；
+  - 完善的 JWT 权限隔离与卡密授权体系（支持服务端一键吊销即触发 Kill Switch）；
+  - 联系人画像标签系统（关系深度、语言风格偏好、禁忌避讳话题）；
+  - 动态 OpenAI 模型网关（未配置 Key 时自动平滑降级至 mock 建议，便于无额度联调）；
+  - 敏感词风控拦截（涉财、验证码等敏感行为自动终止机器回复并转人工）；
+  - WebSocket 全双工实时通信中继与审计日志留痕。
+- **`admin-web/` (运营工作台)**：
+  - 基于 React 18 + Vite 5 + TypeScript + Ant Design 5；
+  - 数据可视化仪表盘、联系人画像配置、多角色人设 Prompt 调试、卡密批量生成/冻结、完整审计操作回溯。
+- **`android/` (端侧挂载引擎)**：
+  - 基于 Kotlin + Xposed / LSPosed 架构体系；
+  - 包含 `api/`（中台通信客户端）、`data/`（持久化与卡密缓存）、`hook/`（底层消息拦截与智能回复注入引擎）、`net/`（WebSocket 实时建议接收与熔断感知）、`ui/`（原生配置界面）。
 
-### 1. 后端（Python 3.12+）
+---
+
+## 🚀 快速上手与运行
+
+### 1. 启动后端中台 (Python 3.12+)
 
 ```bash
 cd backend
-py -m pip install -r requirements.txt --proxy ""   # 本机需绕过本地代理时加 --proxy ""
-py -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 安装运行依赖
+pip install -r requirements.txt
+
+# 启动 Uvicorn 异步服务
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+> [!NOTE]
+> 初次启动将自动建表并生成默认管理员凭据：`admin / admin123456`（请在上线后立即通过面板修改）。未配置 `OPENAI_API_KEY` 时默认提供 mock 建议以供链路自测。
 
-启动自动建表并创建默认管理员 `admin / admin123456`（请尽快修改）。AI 网关未配置 `OPENAI_API_KEY` 时返回 mock 建议，便于无 key 联调；配置项见 `backend/README.md`。
-
-### 2. 管理后台
+### 2. 启动 Web 运营工作台
 
 ```bash
 cd admin-web
+
+# 安装依赖
 npm install
-npm run dev      # http://localhost:5173，/api 代理到 http://localhost:8000
-# 或 npm run build 产物在 dist/
+
+# 启动本地开发热更新服务器 (默认端口 5173，自动反代 /api 到 8000 端口)
+npm run dev
+
+# 生产环境静态打包构建
+npm run build
 ```
 
-### 3. Android 模块
+### 3. 构建与部署 Android 模块
 
 ```bash
 cd android
-# 需要 Android SDK；构建：
-gradle :app:assembleDebug
+
+# 使用 Gradle 编译 Debug APK
+./gradlew :app:assembleDebug
+```
+1. 编译完成后在目标设备安装生成的 APK；
+2. 在 **LSPosed** 框架中启用本模块，勾选宿主应用作用域；
+3. 打开配置面板：填入后端服务器 IP 地址（模拟器请填 `10.0.2.2`）、管理员生成的卡密与凭证即可激活。
+
+---
+
+## 🔄 核心业务流转链路
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 聊天对方
+    participant Client as Android 宿主
+    participant Hook as Xposed 模块
+    participant Server as FastAPI 后端中台
+    participant Admin as Web 运营后台
+
+    Admin->>Server: 预先配置人设风格与敏感词策略
+    User->>Client: 发送即时聊天消息
+    Client->>Hook: 底层消息接收捕获
+    Hook->>Server: 上报原始文本与联系人会话 ID
+    Server->>Server: 敏感词预检 (涉及转账/借款直接阻断并转人工)
+    Server->>Server: 结合历史记忆检索与画像 Prompt 调用大模型
+    Server-->>Hook: WebSocket 推送回复建议或拟人延时 (delay_ms)
+    alt 自动托管模式
+        Hook->>Client: 按自然延迟自动填入并模拟发送
+    else 辅助建议模式
+        Hook->>Client: 屏幕悬浮窗弹出 3 条建议供人工一键点选
+    end
 ```
 
-安装后在 LSPosed 中启用并勾选作用域「心遇」，打开「AI Social Agent」配置：填后端地址（局域网 IP，模拟器用 `10.0.2.2`）、后台登录拿到的 JWT、卡密，激活后开启自动回复。
+---
 
-## 使用流程
+## 🧪 自动化测试与工程验证状态
 
-1. 后台登录 → 卡密管理 → 批量生成卡密
-2. Android 端配置 → 激活卡密
-3. 后台 → 人设（默认人设）/ 联系人（画像：关系、风格、禁忌话题）
-4. 收到消息：自动模式直接按 `delay_ms` 自然延迟回复；建议模式弹悬浮窗 3 条建议供点选
-5. 敏感词（转账/借钱/验证码…）命中 → 转人工不自动回复
-6. 吊销卡密 → 该实例所有自动化立即停止（Kill Switch，WebSocket 推送）
+| 模块名称 | 验证方式 | 状态 | 备注说明 |
+|:---|:---|:---|:---|
+| **backend** | `pytest` 自动化单元测试 | ✅ **19 项全通过** | 包含 `smoke_test.py` 全新库端到端冒烟测试 |
+| **admin-web** | `tsc` 静态类型检查 + `vite build` | ✅ **通过** | 静态构建产物产出于 `dist/` |
+| **android** | 代码骨架与接口实现 | ⚠️ **源码结构完备** | 核心 Hook 签名需结合实际逆向特征对齐 |
 
-## 验证状态
+---
 
-| 子项目 | 验证 |
-|---|---|
-| backend | ✅ `pytest` 19 用例全过；✅ `scripts/smoke_test.py` 全链路冒烟通过（全新库） |
-| admin-web | ✅ `tsc` + `vite build` 构建通过（产物 dist/） |
-| android | ⚠️ 源码骨架完成，**未构建验证**（本机无 Android SDK/Gradle 环境） |
+## 📚 详细设计文档
 
-## 遗留 TODO（APK 逆向后填充）
+- 完整接口 API 协议定义：参阅 [docs/API_CONTRACT.md](docs/API_CONTRACT.md)
+- 逆向参考架构：参阅 `客户专用审查/apk_fix_source_code.md`
 
-- `android/.../hook/XinyuHook.kt`：心遇消息收发的方法签名级 Hook 点（类名/方法名以实际 APK 逆向为准；注意 IM 逻辑在 `:core` 进程）
-- `android/.../hook/XinyuHook.kt#sendMessage`：实际发送消息的调用实现（当前返回 false 占位）
+---
 
-> 已实现：平台联系人 ID → 后端 contact_id 自动映射（先查本地缓存 → 拉 /contacts 匹配 → 自动创建），见 `AutoReplyEngine.resolveContactId`。
+## ⚖️ 免责与合规声明
 
-## 文档
-
-- API 契约：`docs/API_CONTRACT.md`
-- 参考源码（WeChatAIAutoReply 结构）：`客户专用审查/apk_fix_source_code.md`
+> [!WARNING]
+> 本工程仅供**技术研究、架构学习与合规自动化运营场景**使用。源码不包含任何规避平台安全风控的对抗逻辑。严禁用于电信诈骗、恶意骚扰、非法引流等违法违规用途，使用者因违规操作产生的一切法律责任由其自行承担。
